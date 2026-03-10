@@ -22,8 +22,16 @@ jobs:
         with:
           python-version: "3.11"
       - run: python -m pip install --upgrade build setuptools-scm
-      - run: python -c "import pathlib; import setuptools_scm; print('SCM version:', setuptools_scm.get_version(str(pathlib.Path.cwd())))"
-      - run: python -m build
+      - id: scm-version
+        name: resolve setuptools_scm version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "SCM_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Resolved version: $VERSION"
+      - name: build distribution
+        env:
+          SETUPTOOLS_SCM_PRETEND_VERSION: ${{ env.SCM_VERSION }}
+        run: python -m build
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   publish-testpypi:
@@ -37,8 +45,16 @@ jobs:
         with:
           python-version: "3.11"
       - run: python -m pip install --upgrade build setuptools-scm
-      - run: python -c "import pathlib; import setuptools_scm; print('SCM version:', setuptools_scm.get_version(str(pathlib.Path.cwd())))"
-      - run: python -m build
+      - id: scm-version
+        name: resolve setuptools_scm version
+        run: |
+          VERSION="${GITHUB_REF_NAME#test-}"
+          echo "SCM_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Resolved version: $VERSION"
+      - name: build distribution
+        env:
+          SETUPTOOLS_SCM_PRETEND_VERSION: ${{ env.SCM_VERSION }}
+        run: python -m build
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
