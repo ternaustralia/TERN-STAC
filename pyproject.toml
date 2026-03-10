@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=69", "setuptools-scm>=8", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tern-stac"
+dynamic = ["version"]
+description = "Python helpers for working with TERN STAC data"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+authors = [
+  { name = "TERN STAC Team" }
+]
+keywords = ["stac", "tern", "rasterio", "xarray", "geopandas", "pystac"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+  "pystac-client>=0.9.0",
+  "pystac>=1.12.0",
+]
+
+[project.optional-dependencies]
+rasterio = ["rasterio>=1.3.0"]
+xarray = [
+  "xarray>=2024.1.0",
+  "rioxarray>=0.16.0",
+]
+geopandas = ["geopandas>=0.14.0"]
+all = [
+  "rasterio>=1.3.0",
+  "xarray>=2024.1.0",
+  "rioxarray>=0.16.0",
+  "geopandas>=0.14.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/TERN-Open-Data/tern-stac"
+Issues = "https://github.com/TERN-Open-Data/tern-stac/issues"
+
+[project.scripts]
+tern-stac = "tern_stac.cli:main"
+
+[tool.setuptools_scm]
+tag_regex = "^(?:v|test-)(?P<version>\\d+\\.\\d+\\.\\d+)$"
+write_to = "src/tern_stac/_version.py"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
