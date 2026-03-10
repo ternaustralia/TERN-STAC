@@ -16,10 +16,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: python -m pip install --upgrade build
+      - run: python -m pip install --upgrade build setuptools-scm
+      - run: python -c "import pathlib; import setuptools_scm; print('SCM version:', setuptools_scm.get_version(str(pathlib.Path.cwd())))"
       - run: python -m build
       - uses: pypa/gh-action-pypi-publish@release/v1
 
@@ -28,10 +31,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: python -m pip install --upgrade build
+      - run: python -m pip install --upgrade build setuptools-scm
+      - run: python -c "import pathlib; import setuptools_scm; print('SCM version:', setuptools_scm.get_version(str(pathlib.Path.cwd())))"
       - run: python -m build
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
