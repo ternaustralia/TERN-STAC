@@ -15,6 +15,9 @@ Optional dependency extras:
 pip install tern-stac[rasterio]
 pip install tern-stac[xarray]
 pip install tern-stac[geopandas]
+pip install tern-stac[odc]
+pip install tern-stac[plot]
+pip install tern-stac[lidar]
 pip install tern-stac[all]
 ```
 
@@ -48,6 +51,59 @@ gdf = client.load_geodataframe(first_item, asset_key="geometry")
 
 ```python
 ds = load_from_tern("https://example.com/some.tif", backend="rasterio")
+```
+
+## STAC asset helpers
+
+```python
+from tern_stac import get_item_asset_href, load_items_as_time_series, load_items_odc
+
+asset = get_item_asset_href(item, media_type="application/xml", role="data")
+
+# Load many rasterio-compatible items into a time-indexed xarray object
+ts = load_items_as_time_series(
+    items,
+    media_type="application/xml",
+    role="data",
+    chunks=True,
+)
+
+# Load many items with odc-stac (multi-band / grouped loading)
+ds = load_items_odc(items, bands=["b5", "b4", "b3"], crs="utm", groupby="solar_day")
+```
+
+## ROI and reduction helpers
+
+```python
+from tern_stac import bounds_from_geodataframe, spatial_slice, mean_over_dims
+
+bounds = bounds_from_geodataframe(region_gdf)
+
+roi = spatial_slice(ds, bounds=bounds)
+mean_by_time = mean_over_dims(roi, dims=("x", "y"))
+```
+
+## LiDAR helper
+
+```python
+from tern_stac import laz_to_canopy_height
+
+chm = laz_to_canopy_height("https://data.tern.org.au/uas/dronescape/..../file.copc.laz")
+```
+
+## Quick plotting utilities
+
+```python
+from tern_stac import preview_raster, plot_time_series, explore_odc
+
+# Plot a single band/time scene
+preview_raster(ds, band=0, save_path="preview.png")
+
+# Plot region-mean time series
+plot_time_series(ts, figsize=(12, 4))
+
+# Interactive map via odc.explore (when odc-geo is available)
+explore_odc(ds, band=0)
 ```
 
 ## Build and release
