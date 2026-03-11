@@ -103,15 +103,16 @@ def plot_time_series(
     figsize: tuple[int, int] = (12, 6),
     title: Optional[str] = None,
     save_path: Optional[str] = None,
+    compute: bool = True,
 ):
     """Plot time-series of region-mean values."""
 
     try:
         import matplotlib.pyplot as plt
-        import xarray as xr
+        import numpy as np
     except Exception as exc:  # pragma: no cover
         raise ImportError(
-            "matplotlib and xarray are required. Install with `pip install tern-stac[plot]`"
+            "matplotlib and numpy are required. Install with `pip install tern-stac[plot]`"
         ) from exc
 
     da = _as_dataarray(dataset, variable=variable)
@@ -121,19 +122,23 @@ def plot_time_series(
         raise ValueError(f"Expected time dimension '{time_dim}' for time series plot.")
 
     ts = da.mean(dim=reduce_dims, skipna=True)
+    if compute and hasattr(ts, "compute"):
+        # Compute once to avoid repeated dask evaluations per plotted line.
+        ts = ts.compute()
     fig, ax = plt.subplots(figsize=figsize)
 
     if band_dim in ts.dims:
         labels = ts[band_dim].values
+        x_values = ts[time_dim].values
+        y_values = np.asarray(ts.values)
         for i, label in enumerate(labels):
-            line = ts.isel({band_dim: i}).to_pandas()
-            ax.plot(ts[time_dim].values, line, label=str(label))
+            ax.plot(x_values, y_values[:, i], label=str(label))
         ax.legend()
         if cmap is not None:
             for i, l in enumerate(ax.lines):
                 l.set_color(cmap)
     else:
-        ax.plot(ts[time_dim].values, ts.values, color=cmap or "tab:blue")
+        ax.plot(ts[time_dim].values, np.asarray(ts.values), color=cmap or "tab:blue")
 
     ax.set_xlabel(time_dim)
     ax.set_ylabel(da.name or "value")

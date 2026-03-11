@@ -55,6 +55,27 @@ ds = load_from_tern("https://example.com/some.tif", backend="rasterio")
 
 ## STAC asset helpers
 
+## Examples
+
+Run one of the API examples:
+
+```bash
+python examples/imagery_api_workflow.py
+python examples/fractional_cover_api_workflow.py
+python examples/lidar_chm_api_workflow.py
+```
+
+Each script uses the TERN STAC API via `TernStacClient` and contains placeholder collection/item identifiers that you can swap in.
+
+```python
+from tern_stac import TernStacClient
+
+client = TernStacClient()
+search = client.search(collections=["<collection_id>"])
+items = list(search.items())
+print(len(items))
+```
+
 ```python
 from tern_stac import get_item_asset_href, load_items_as_time_series, load_items_odc
 
