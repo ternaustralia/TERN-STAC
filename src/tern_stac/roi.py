@@ -10,6 +10,44 @@ except Exception:  # pragma: no cover - optional dependency
     xr = None  # type: ignore
 
 
+def _dataset_crs_str(dataset) -> str | None:
+    """Best-effort extraction of dataset CRS as a string."""
+
+    try:
+        rio_crs = dataset.rio.crs
+        if rio_crs is not None:
+            return str(rio_crs)
+    except Exception:
+        pass
+
+    try:
+        odc_crs = dataset.odc.crs
+        if odc_crs is not None:
+            return str(odc_crs)
+    except Exception:
+        pass
+
+    attrs = getattr(dataset, "attrs", {}) or {}
+    if isinstance(attrs, dict):
+        crs = attrs.get("crs")
+        if crs:
+            return str(crs)
+
+    coords = getattr(dataset, "coords", {})
+    try:
+        spatial_ref = coords.get("spatial_ref")
+    except Exception:
+        spatial_ref = None
+    if spatial_ref is not None:
+        sr_attrs = getattr(spatial_ref, "attrs", {}) or {}
+        for key in ("crs_wkt", "spatial_ref"):
+            value = sr_attrs.get(key)
+            if value:
+                return str(value)
+
+    return None
+
+
 def spatial_slice(
     dataset,
     bounds: Tuple[float, float, float, float],
@@ -38,30 +76,31 @@ def spatial_slice(
 
     minx, miny, maxx, maxy = bounds
     if bounds_crs is not None:
-        data_crs = None
+        data_crs_str = _dataset_crs_str(dataset)
+        if data_crs_str is None:
+            raise ValueError(
+                "Could not determine dataset CRS for bounds transform. "
+                "Provide bounds in dataset CRS, or ensure CRS metadata is available."
+            )
         try:
-            data_crs = dataset.rio.crs
-        except Exception:
-            data_crs = None
-        if data_crs is not None:
-            data_crs_str = str(data_crs)
-            if data_crs_str.upper() != bounds_crs.upper():
-                try:
-                    from rasterio.warp import transform_bounds
-                except Exception as exc:  # pragma: no cover
-                    raise ImportError(
-                        "rasterio is required for bounds CRS transform. "
-                        "Install with `pip install tern-stac[rasterio]`"
-                    ) from exc
-                minx, miny, maxx, maxy = transform_bounds(
-                    bounds_crs,
-                    data_crs_str,
-                    minx,
-                    miny,
-                    maxx,
-                    maxy,
-                    densify_pts=21,
-                )
+            from rasterio.crs import CRS
+            from rasterio.warp import transform_bounds
+        except Exception as exc:  # pragma: no cover
+            raise ImportError(
+                "rasterio is required for bounds CRS transform. "
+                "Install with `pip install tern-stac[rasterio]`"
+            ) from exc
+
+        if CRS.from_user_input(data_crs_str) != CRS.from_user_input(bounds_crs):
+            minx, miny, maxx, maxy = transform_bounds(
+                bounds_crs,
+                data_crs_str,
+                minx,
+                miny,
+                maxx,
+                maxy,
+                densify_pts=21,
+            )
 
     y_descending = bool(dataset[y_dim][0] > dataset[y_dim][-1])
 
