@@ -9,9 +9,9 @@ from tern_stac import get_item_asset_href, preview_raster
 from tern_stac import laz_to_canopy_height
 
 # Fill in from your catalog values
-COLLECTION_ID = "<lidar_collection_id>"
-POINT_CLOUD_ITEM_ID = "<item_id>"
-POINT_CLOUD_ASSET_KEY = "<asset_key>"  # e.g., "point_cloud" or similar
+COLLECTION_ID = "uas_dronescape_ntabrt0001_20240829__lidar"
+POINT_CLOUD_ITEM_ID = "level1_proc"
+POINT_CLOUD_ASSET_KEY = "NTABRT0001.copc.laz"  # e.g., "point_cloud" or similar
 POINT_CLOUD_MEDIA_TYPE = None  # e.g., "application/vnd.las+las", if preferred
 POINT_CLOUD_ROLE = None  # e.g., "data"
 

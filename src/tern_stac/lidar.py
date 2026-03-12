@@ -35,8 +35,21 @@ def laz_to_canopy_height(
             except Exception:
                 points = crdr.query()
                 las = laspy.lasdata.LasData(header=crdr.header, points=points)
-    except Exception:
-        las = laspy.read(source)
+    except Exception as exc:
+        if "lazrs" in str(exc).lower():
+            raise ImportError(
+                "COPC/LAZ reading requires the `lazrs` backend. "
+                "Install with `pip install tern-stac[lidar]` or `pip install lazrs`."
+            ) from exc
+        try:
+            las = laspy.read(source)
+        except Exception as read_exc:
+            if "lazrs" in str(read_exc).lower():
+                raise ImportError(
+                    "LAZ reading requires the `lazrs` backend. "
+                    "Install with `pip install tern-stac[lidar]` or `pip install lazrs`."
+                ) from read_exc
+            raise
 
     x, y, z = las.x, las.y, las.z
 
