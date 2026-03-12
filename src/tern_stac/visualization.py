@@ -13,19 +13,16 @@ def _as_dataarray(dataset: Any, variable: Optional[str] = None):
             "xarray is required for plotting helpers. Install with `pip install tern-stac[xarray]`"
         ) from exc
 
-    if variable is not None and hasattr(dataset, "data_vars"):
-        if variable not in dataset.data_vars:
-            raise KeyError(f"Variable '{variable}' not found in dataset.")
-        dataset = dataset[variable]
-    if hasattr(dataset, "to_array"):
-        if not isinstance(dataset, xr.DataArray):
-            if variable is None and len(dataset.data_vars) == 1:
-                dataset = next(iter(dataset.data_vars.values()))
-            elif variable is None:
-                raise ValueError(
-                    "Dataset has multiple variables; pass variable explicitly."
-                )
-            dataset = getattr(dataset, variable) if variable else dataset
+    if hasattr(dataset, "data_vars") and not isinstance(dataset, xr.DataArray):
+        if variable is not None:
+            if variable not in dataset.data_vars:
+                raise KeyError(f"Variable '{variable}' not found in dataset.")
+            dataset = dataset[variable]
+        elif len(dataset.data_vars) == 1:
+            dataset = next(iter(dataset.data_vars.values()))
+        else:
+            # Match notebook behavior: convert multi-var Dataset to a plottable stack.
+            dataset = dataset.to_array(dim="variable")
     if not isinstance(dataset, xr.DataArray):
         raise TypeError("Expected an xarray DataArray or Dataset.")
     return dataset
@@ -59,19 +56,25 @@ def preview_raster(
     for dim in ("time",):
         if dim in da.dims:
             da = da.isel({dim: time_index}, drop=False)
-    if "band" in da.dims and band is not None:
+    series_dim = None
+    if "band" in da.dims:
+        series_dim = "band"
+    elif "variable" in da.dims:
+        series_dim = "variable"
+
+    if series_dim is not None and band is not None:
         da = (
-            da.sel(band=band, drop=True)
-            if band in da.coords.get("band", [])
-            else da.isel(band=band)
+            da.sel({series_dim: band}, drop=True)
+            if series_dim in da.coords and band in da.coords.get(series_dim, [])
+            else da.isel({series_dim: band})
         )
     if ax is not None:
         fig = ax.figure
         axis = ax
     else:
         fig, axis = plt.subplots(figsize=figsize)
-    if hasattr(da, "isel") and "band" in da.dims and band is None:
-        da = da.isel(band=0, drop=True)
+    if hasattr(da, "isel") and series_dim is not None and band is None:
+        da = da.isel({series_dim: 0}, drop=True)
     plot = da.plot.imshow(ax=axis, robust=robust, cmap=cmap)
     if title is None:
         title = _build_title(da, variable=variable, band=band, time_index=time_index)
@@ -127,9 +130,13 @@ def plot_time_series(
         ts = ts.compute()
     fig, ax = plt.subplots(figsize=figsize)
 
-    if band_dim in ts.dims:
-        ts_plot = ts.transpose(time_dim, band_dim)
-        labels = ts_plot[band_dim].values
+    series_dim = band_dim if band_dim in ts.dims else None
+    if series_dim is None and "variable" in ts.dims:
+        series_dim = "variable"
+
+    if series_dim is not None:
+        ts_plot = ts.transpose(time_dim, series_dim)
+        labels = ts_plot[series_dim].values
         x_values = ts_plot[time_dim].values
         y_values = np.asarray(ts_plot.values)
         if not np.isfinite(y_values).any():

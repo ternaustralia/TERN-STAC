@@ -11,11 +11,12 @@ from tern_stac import plot_time_series, preview_raster
 
 
 # Fill in from your catalog values
-COLLECTION_ID = "<collection_id>"
+COLLECTION_ID = "uas_dronescape_saagaw0009_20241001__imagery_multispec"
 START_DATE = "2024-01-01"
 END_DATE = "2024-12-31"
 BANDS = ["b5", "b4", "b3"]
-REGION_BOUNDS = (-31.0, 135.0, -30.0, 136.0)  # (minx, miny, maxx, maxy)
+REGION_BOUNDS = (135.0, -31.0, 136.0, -30.0)  # (minx, miny, maxx, maxy)
+REGION_BOUNDS_CRS = "EPSG:4326"
 
 
 def main() -> None:
@@ -42,7 +43,7 @@ def main() -> None:
         chunks={},
     )
 
-    roi = spatial_slice(ds, REGION_BOUNDS)
+    roi = spatial_slice(ds, REGION_BOUNDS, bounds_crs=REGION_BOUNDS_CRS)
     preview_raster(
         roi,
         band=0,
