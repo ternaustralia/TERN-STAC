@@ -84,7 +84,7 @@ def spatial_slice(
             )
         try:
             from rasterio.crs import CRS
-            from rasterio.warp import transform_bounds
+            from rasterio.warp import transform
         except Exception as exc:  # pragma: no cover
             raise ImportError(
                 "rasterio is required for bounds CRS transform. "
@@ -92,15 +92,15 @@ def spatial_slice(
             ) from exc
 
         if CRS.from_user_input(data_crs_str) != CRS.from_user_input(bounds_crs):
-            minx, miny, maxx, maxy = transform_bounds(
+            # Transform explicit corner points to avoid axis-order ambiguity.
+            xs, ys = transform(
                 bounds_crs,
                 data_crs_str,
-                minx,
-                miny,
-                maxx,
-                maxy,
-                densify_pts=21,
+                [minx, maxx, maxx, minx],
+                [miny, miny, maxy, maxy],
             )
+            minx, maxx = min(xs), max(xs)
+            miny, maxy = min(ys), max(ys)
 
     y_descending = bool(dataset[y_dim][0] > dataset[y_dim][-1])
 
@@ -112,7 +112,10 @@ def spatial_slice(
     if out.sizes.get(x_dim, 0) == 0 or out.sizes.get(y_dim, 0) == 0:
         raise ValueError(
             "Spatial slice returned no pixels. "
-            "Check bounds values and bounds CRS against dataset CRS."
+            "Check bounds values and bounds CRS against dataset CRS. "
+            f"Dataset x/y extent: ({float(dataset[x_dim].min())}, {float(dataset[y_dim].min())}, "
+            f"{float(dataset[x_dim].max())}, {float(dataset[y_dim].max())}). "
+            f"Transformed bounds used: ({minx}, {miny}, {maxx}, {maxy})."
         )
     return out
 
