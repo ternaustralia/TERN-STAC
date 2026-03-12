@@ -183,6 +183,7 @@ def load_items_as_time_series(
     time_key: str = "datetime",
     chunks: Any = True,
     clip_bounds: Optional[tuple[float, float, float, float]] = None,
+    clip_bounds_crs: Optional[str] = None,
     to_numpy_nodata: bool = False,
     preprocess: Optional[Callable[[Any, Any], Any]] = None,
 ):
@@ -209,6 +210,30 @@ def load_items_as_time_series(
 
         if clip_bounds is not None:
             minx, miny, maxx, maxy = clip_bounds
+            if clip_bounds_crs is not None:
+                try:
+                    data_crs = ds.rio.crs
+                except Exception:
+                    data_crs = None
+                if data_crs is not None:
+                    data_crs_str = str(data_crs)
+                    if data_crs_str.upper() != clip_bounds_crs.upper():
+                        try:
+                            from rasterio.warp import transform_bounds
+                        except Exception as exc:  # pragma: no cover
+                            raise ImportError(
+                                "rasterio is required for clip_bounds CRS transform. "
+                                "Install with `pip install tern-stac[xarray]`"
+                            ) from exc
+                        minx, miny, maxx, maxy = transform_bounds(
+                            clip_bounds_crs,
+                            data_crs_str,
+                            minx,
+                            miny,
+                            maxx,
+                            maxy,
+                            densify_pts=21,
+                        )
             y_coord_desc = ds.y[0] > ds.y[-1]
             if y_coord_desc:
                 ds = ds.sel(x=slice(minx, maxx), y=slice(maxy, miny))

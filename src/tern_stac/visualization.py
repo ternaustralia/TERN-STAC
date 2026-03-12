@@ -128,17 +128,37 @@ def plot_time_series(
     fig, ax = plt.subplots(figsize=figsize)
 
     if band_dim in ts.dims:
-        labels = ts[band_dim].values
-        x_values = ts[time_dim].values
-        y_values = np.asarray(ts.values)
+        ts_plot = ts.transpose(time_dim, band_dim)
+        labels = ts_plot[band_dim].values
+        x_values = ts_plot[time_dim].values
+        y_values = np.asarray(ts_plot.values)
+        if not np.isfinite(y_values).any():
+            raise ValueError(
+                "No finite values available for plotting. "
+                "Check ROI bounds, nodata masking, and selected items."
+            )
         for i, label in enumerate(labels):
-            ax.plot(x_values, y_values[:, i], label=str(label))
+            if y_values.shape[0] == 1:
+                ax.scatter(x_values, y_values[:, i], label=str(label))
+            else:
+                ax.plot(x_values, y_values[:, i], label=str(label))
         ax.legend()
         if cmap is not None:
             for i, l in enumerate(ax.lines):
                 l.set_color(cmap)
     else:
-        ax.plot(ts[time_dim].values, np.asarray(ts.values), color=cmap or "tab:blue")
+        ts_plot = ts.transpose(time_dim, ...)
+        x_values = ts_plot[time_dim].values
+        y_values = np.asarray(ts_plot.values)
+        if not np.isfinite(y_values).any():
+            raise ValueError(
+                "No finite values available for plotting. "
+                "Check ROI bounds, nodata masking, and selected items."
+            )
+        if y_values.shape[0] == 1:
+            ax.scatter(x_values, y_values, color=cmap or "tab:blue")
+        else:
+            ax.plot(x_values, y_values, color=cmap or "tab:blue")
 
     ax.set_xlabel(time_dim)
     ax.set_ylabel(da.name or "value")

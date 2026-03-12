@@ -15,12 +15,14 @@ from tern_stac import (
 COLLECTION_ID = "gov_qld_fractional_cover_v3_landsat_fractional_cover__seasonal"
 START_DATE = "2020-01-01"
 END_DATE = "2025-01-01"
+
 REGION_BOUNDS = (
-    110.52056451798,
-    -44.60861516917,
-    154.15082095686,
-    -6.5048011649277,
+    152.914613,
+    -27.561273,
+    153.142615,
+    -27.367202,
 )  # (minx, miny, maxx, maxy)
+REGION_BOUNDS_CRS = "EPSG:4326"
 
 
 def main() -> None:
@@ -51,6 +53,7 @@ def main() -> None:
         role="data",
         chunks=True,
         clip_bounds=REGION_BOUNDS,
+        clip_bounds_crs=REGION_BOUNDS_CRS,
         to_numpy_nodata=True,
         preprocess=per_item_reduce,
     )
