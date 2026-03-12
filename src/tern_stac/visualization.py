@@ -33,6 +33,7 @@ def preview_raster(
     *,
     variable: Optional[str] = None,
     band: Any = None,
+    rgb_bands: Optional[Sequence[Any]] = None,
     time_index: int = -1,
     cmap: str = "viridis",
     robust: bool = True,
@@ -46,6 +47,7 @@ def preview_raster(
 
     try:
         import matplotlib.pyplot as plt
+        import xarray as xr
     except Exception as exc:  # pragma: no cover
         raise ImportError(
             "matplotlib and xarray are required. Install with `pip install tern-stac[plot]`"
@@ -62,20 +64,44 @@ def preview_raster(
     elif "variable" in da.dims:
         series_dim = "variable"
 
-    if series_dim is not None and band is not None:
-        da = (
-            da.sel({series_dim: band}, drop=True)
-            if series_dim in da.coords and band in da.coords.get(series_dim, [])
-            else da.isel({series_dim: band})
-        )
     if ax is not None:
         fig = ax.figure
         axis = ax
     else:
         fig, axis = plt.subplots(figsize=figsize)
-    if hasattr(da, "isel") and series_dim is not None and band is None:
-        da = da.isel({series_dim: 0}, drop=True)
-    plot = da.plot.imshow(ax=axis, robust=robust, cmap=cmap)
+
+    if rgb_bands is not None:
+        if band is not None:
+            raise ValueError("Pass either `band` or `rgb_bands`, not both.")
+        if len(rgb_bands) != 3:
+            raise ValueError("`rgb_bands` must contain exactly 3 entries.")
+        if series_dim is None:
+            raise ValueError(
+                "RGB plotting requires a `band` or `variable` dimension with 3 channels."
+            )
+
+        selected = []
+        for key in rgb_bands:
+            if isinstance(key, int):
+                selected.append(da.isel({series_dim: key}))
+            else:
+                selected.append(da.sel({series_dim: key}))
+        da_rgb = xr.concat(selected, dim="band")
+        da_rgb = da_rgb.assign_coords(band=["R", "G", "B"])
+        if "y" in da_rgb.dims and "x" in da_rgb.dims:
+            da_rgb = da_rgb.transpose("y", "x", "band")
+        plot = da_rgb.plot.imshow(ax=axis, robust=robust, rgb="band")
+    else:
+        if series_dim is not None and band is not None:
+            da = (
+                da.sel({series_dim: band}, drop=True)
+                if series_dim in da.coords and band in da.coords.get(series_dim, [])
+                else da.isel({series_dim: band})
+            )
+        if hasattr(da, "isel") and series_dim is not None and band is None:
+            da = da.isel({series_dim: 0}, drop=True)
+        plot = da.plot.imshow(ax=axis, robust=robust, cmap=cmap)
+
     if title is None:
         title = _build_title(da, variable=variable, band=band, time_index=time_index)
     if title:

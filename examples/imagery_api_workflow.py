@@ -6,8 +6,8 @@ from pathlib import Path
 
 from tern_stac import TernStacClient
 from tern_stac import load_items_odc
-from tern_stac import mean_over_dims, spatial_slice
-from tern_stac import plot_time_series, preview_raster
+from tern_stac import spatial_slice
+from tern_stac import preview_raster
 
 
 # Fill in from your catalog values
@@ -46,18 +46,10 @@ def main() -> None:
     roi = spatial_slice(ds, REGION_BOUNDS, bounds_crs=REGION_BOUNDS_CRS)
     preview_raster(
         roi,
-        band=0,
+        rgb_bands=BANDS,
         time_index=-1,
-        save_path="outputs/imagery_roi_last.png",
-        title="Imagery ROI (last timestep, first band)",
-    )
-
-    summary = mean_over_dims(roi, dims=("x", "y"))
-    plot_time_series(
-        summary,
-        band_dim="band",
-        save_path="outputs/imagery_time_series.png",
-        title="Imagery ROI mean through time",
+        save_path="outputs/imagery_roi_rgb_last.png",
+        title="Imagery ROI RGB (last timestep)",
     )
 
 
