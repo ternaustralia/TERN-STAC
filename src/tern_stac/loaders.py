@@ -258,3 +258,8 @@ def load_items_as_time_series(
         )
 
     return xr.concat(sorted(datasets, key=lambda d: d.time.values.item()), dim="time")
+
+
+# Re-export stackstac loader from this module for discoverability alongside the
+# existing rioxarray-based `load_items_as_time_series` helper.
+from .stackstac_utils import load_items_stackstac  # noqa: E402,F401

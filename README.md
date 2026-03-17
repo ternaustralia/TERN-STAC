@@ -18,6 +18,7 @@ pip install tern-stac[geopandas]
 pip install tern-stac[odc]
 pip install tern-stac[plot]
 pip install tern-stac[lidar]
+pip install tern-stac[stackstac]
 pip install tern-stac[all]
 ```
 
@@ -63,9 +64,15 @@ Run one of the API examples:
 python examples/imagery_api_workflow.py
 python examples/fractional_cover_api_workflow.py
 python examples/lidar_chm_api_workflow.py
+python examples/stackstac_api_workflow.py
 ```
 
-Each script uses the TERN STAC API via `TernStacClient` and contains placeholder collection/item identifiers that you can swap in.
+`stackstac_api_workflow.py` uses the stackstac gif tutorial data source (Planetary Computer) and requires:
+```bash
+pip install planetary-computer
+```
+
+The first three scripts use the TERN STAC API via `TernStacClient`. The stackstac script intentionally uses Planetary Computer data from the stackstac tutorial.
 
 ```python
 from tern_stac import TernStacClient
@@ -91,6 +98,28 @@ ts = load_items_as_time_series(
 
 # Load many items with odc-stac (multi-band / grouped loading)
 ds = load_items_odc(items, bands=["b5", "b4", "b3"], crs="utm", groupby="solar_day")
+```
+
+## stackstac helpers
+
+```python
+from tern_stac import (
+    load_items_stackstac,
+    mosaic_time,
+    get_array_bounds,
+    get_array_epsg,
+)
+
+arr = load_items_stackstac(
+    items,
+    assets=["b5", "b4", "b3"],
+    bounds_latlon=(135.62, -30.67, 135.63, -30.66),
+)
+
+print(get_array_epsg(arr))
+print(get_array_bounds(arr, to_epsg=4326))
+
+arr_mosaic = mosaic_time(arr)
 ```
 
 ## ROI and reduction helpers
