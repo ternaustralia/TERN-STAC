@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Callable, Iterable, List, Optional, Sequence
 
+from .auth import is_http_401_error, warn_auth_required
+
 try:
     import xarray as xr  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
@@ -171,7 +173,13 @@ def load_items_odc(
         params["resolution"] = resolution
     params.update(kwargs)
     params = {k: v for k, v in params.items() if v is not None}
-    return load(items, **params)
+    try:
+        return load(items, **params)
+    except Exception as exc:
+        if is_http_401_error(exc):
+            warn_auth_required(context="load_items_odc")
+            return None
+        raise
 
 
 def load_items_as_time_series(
@@ -206,7 +214,13 @@ def load_items_as_time_series(
         href = get_item_asset_href(
             item, asset_key=asset_key, media_type=media_type, role=role
         )
-        ds = rxr.open_rasterio(href, chunks=chunks)
+        try:
+            ds = rxr.open_rasterio(href, chunks=chunks)
+        except Exception as exc:
+            if is_http_401_error(exc):
+                warn_auth_required(context="load_items_as_time_series")
+                continue
+            raise
 
         if clip_bounds is not None:
             minx, miny, maxx, maxy = clip_bounds
@@ -254,7 +268,8 @@ def load_items_as_time_series(
 
     if not datasets:
         raise ValueError(
-            "No datasets were loaded; check input items and asset filters."
+            "No datasets were loaded; check input items/asset filters, "
+            "or verify authentication for protected asset URLs."
         )
 
     return xr.concat(sorted(datasets, key=lambda d: d.time.values.item()), dim="time")

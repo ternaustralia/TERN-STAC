@@ -48,6 +48,61 @@ xda = client.load_xarray(first_item, asset_key="rgb")
 gdf = client.load_geodataframe(first_item, asset_key="geometry")
 ```
 
+## Configure APIkey for accessing TERN data
+
+### How to get a TERN API Key
+
+To generate an API Key, please visit the TERN Account portal at (https://account.tern.org.au) and Sign In. After Sign In, follow the steps below (see figure 1 and figure 2):
+
+Steps:
+
+1. In the menu on the left, click Create API key menu link (1)
+
+2. Enter the name of the API key in the API key name field (can be arbitrary, for your records - but it's mandatory) (2)
+
+3. Click the button Request API Key (3)
+
+4. Copy the generated API key in the API key field (4)
+
+![alt text](apikey.png)
+
+### How to use the API Key
+
+Reading data via data.tern.org.au involves underlying gdal methods. a gdalrc or netrc file is required for authentication.
+
+#### (preferred) create netrc config file
+
+`~/.netrc` is a common way to configure authentication for network services, and is supported by many tools like curl, python requests, gdal and many others.
+
+create `~/.netrc` using the apikey:
+
+```
+# .netrc contents to read data from data.tern.org.au
+machine data.tern.org.au
+  login apikey
+  password <apikey>
+
+machine other.sources.if.any
+  ...
+```
+
+#### create gdalrc config file
+
+`~/.gdal/gdalrc` contains gdal-only env variables
+
+create `~/.gdal/gdalrc` using the apikey:
+
+```
+[credentials]
+
+[.dataprod]
+path=/vsicurl/https://data.tern.org.au
+GDAL_HTTP_USERPWD=apikey:<apikey>
+
+[.other_sources_if_any]
+path=...
+```
+
 ## Direct helpers
 
 ```python

@@ -1,5 +1,8 @@
 """Example: stackstac workflow using the dataset pattern from the gif tutorial.
 
+This example intentionally uses non-TERN data because current TERN assets are
+not suitable for stackstac in the same way.
+
 Reference:
 https://stackstac.readthedocs.io/en/latest/examples/gif.html
 """
@@ -22,10 +25,10 @@ from tern_stac import (
 # not suitable for stackstac in the same way.
 STAC_API_URL = "https://planetarycomputer.microsoft.com/api/stac/v1"
 COLLECTION_ID = "landsat-8-c2-l2"
-START_DATE = "2024-01-01"
-END_DATE = "2024-12-31"
+START_DATE = "2013-01-01"
+END_DATE = "2023-12-31"
 REGION_BOUNDS = (-69.95, 41.62, -69.88, 41.67)  # Cape Cod, lon/lat (gif example area)
-MAX_ITEMS = 10
+MAX_ITEMS = 100
 
 
 def main() -> None:
@@ -55,9 +58,10 @@ def main() -> None:
 
     arr = load_items_stackstac(
         items,
-        assets=["red", "green", "blue", "QA_PIXEL"],
+        assets=["SR_B4", "SR_B3", "SR_B2", "QA_PIXEL"],
         bounds_latlon=REGION_BOUNDS,
-        chunksize=1024,
+        # chunksize=1024,
+        epsg=32619,
     )
 
     # Match stackstac gif tutorial style for harmonized band names.
@@ -74,13 +78,14 @@ def main() -> None:
         bitmask |= 1 << field
     qa = arr.sel(band="QA_PIXEL").astype("uint16")
     good = arr.where((qa & bitmask) == 0)
+    # good.time.diff("time").dt.days.plot.hist()
 
     rgb = good.sel(band=["red", "green", "blue"])
 
     # Time mosaic and simple biannual composites
     mosaic = mosaic_time(rgb)
     _ = mosaic  # keeps example explicit without forcing a full compute here
-    composites = rgb.resample(time="2Q").median("time").ffill("time")
+    composites = rgb.resample(time="2Q").median("time").ffill("time")[1:]
 
     preview_raster(
         composites,

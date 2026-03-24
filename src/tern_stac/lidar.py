@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from .auth import is_http_401_error, warn_auth_required
+
 
 def laz_to_canopy_height(
     source,
@@ -36,6 +38,9 @@ def laz_to_canopy_height(
                 points = crdr.query()
                 las = laspy.lasdata.LasData(header=crdr.header, points=points)
     except Exception as exc:
+        if is_http_401_error(exc):
+            warn_auth_required(context="laz_to_canopy_height")
+            return None
         if "lazrs" in str(exc).lower():
             raise ImportError(
                 "COPC/LAZ reading requires the `lazrs` backend. "
@@ -44,6 +49,9 @@ def laz_to_canopy_height(
         try:
             las = laspy.read(source)
         except Exception as read_exc:
+            if is_http_401_error(read_exc):
+                warn_auth_required(context="laz_to_canopy_height")
+                return None
             if "lazrs" in str(read_exc).lower():
                 raise ImportError(
                     "LAZ reading requires the `lazrs` backend. "

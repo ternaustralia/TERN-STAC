@@ -7,6 +7,7 @@ import os
 from urllib.parse import urljoin
 
 from pystac_client import Client
+from .auth import is_http_401_error, warn_auth_required
 
 DEFAULT_TERN_STAC_URL = "https://stac-api-test.tern.org.au/"
 TERN_STAC_ENV_VAR = "TERN_STAC_URL"
@@ -64,7 +65,13 @@ class TernStacClient:
             ) from exc
 
         href = _resolve_asset_href(stac_object, asset_key)
-        return rasterio.open(href, **kwargs)
+        try:
+            return rasterio.open(href, **kwargs)
+        except Exception as exc:
+            if is_http_401_error(exc):
+                warn_auth_required(context="load_rasterio")
+                return None
+            raise
 
     def load_xarray(self, stac_object: Any, asset_key: Optional[str] = None, **kwargs: Any):
         """Load raster-like STAC assets directly into xarray via rioxarray."""
@@ -77,7 +84,13 @@ class TernStacClient:
             ) from exc
 
         href = _resolve_asset_href(stac_object, asset_key)
-        return rxr.open_rasterio(href, **kwargs)
+        try:
+            return rxr.open_rasterio(href, **kwargs)
+        except Exception as exc:
+            if is_http_401_error(exc):
+                warn_auth_required(context="load_xarray")
+                return None
+            raise
 
     def load_geodataframe(self, stac_object: Any, asset_key: Optional[str] = None, **kwargs: Any):
         """Load vector-like STAC assets directly into geopandas."""
@@ -90,7 +103,13 @@ class TernStacClient:
             ) from exc
 
         href = _resolve_asset_href(stac_object, asset_key)
-        return gpd.read_file(href, **kwargs)
+        try:
+            return gpd.read_file(href, **kwargs)
+        except Exception as exc:
+            if is_http_401_error(exc):
+                warn_auth_required(context="load_geodataframe")
+                return None
+            raise
 
 
 def _resolve_asset_href(stac_object: Any, asset_key: Optional[str]) -> str:

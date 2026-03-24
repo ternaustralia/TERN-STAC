@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Optional, Sequence
 
+from .auth import is_http_401_error, warn_auth_required
+
 
 def load_items_stackstac(
     items: Sequence[Any],
@@ -55,7 +57,13 @@ def load_items_stackstac(
         params["dtype"] = dtype
     params.update(kwargs)
     params = {k: v for k, v in params.items() if v is not None}
-    return stackstac.stack(items, **params)
+    try:
+        return stackstac.stack(items, **params)
+    except Exception as exc:
+        if is_http_401_error(exc):
+            warn_auth_required(context="load_items_stackstac")
+            return None
+        raise
 
 
 def mosaic_time(
@@ -74,10 +82,18 @@ def mosaic_time(
             "stackstac is not installed. Install with `pip install tern-stac[stackstac]`"
         ) from exc
 
-    params = {"reverse": reverse, "nodata": nodata}
+    params = {"reverse": reverse}
+    if nodata is not None:
+        params["nodata"] = nodata
     if split_every is not None:
         params["split_every"] = split_every
-    return stackstac.mosaic(arr, **params)
+    try:
+        return stackstac.mosaic(arr, **params)
+    except Exception as exc:
+        if is_http_401_error(exc):
+            warn_auth_required(context="mosaic_time")
+            return None
+        raise
 
 
 def get_array_bounds(arr, *, to_epsg: Optional[int] = None):

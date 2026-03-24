@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Optional, Sequence
 
+from .auth import is_http_401_error, warn_auth_required
+
 
 def _as_dataarray(dataset: Any, variable: Optional[str] = None):
     try:
@@ -90,7 +92,13 @@ def preview_raster(
         da_rgb = da_rgb.assign_coords(band=["R", "G", "B"])
         if "y" in da_rgb.dims and "x" in da_rgb.dims:
             da_rgb = da_rgb.transpose("y", "x", "band")
-        plot = da_rgb.plot.imshow(ax=axis, robust=robust, rgb="band")
+        try:
+            plot = da_rgb.plot.imshow(ax=axis, robust=robust, rgb="band")
+        except Exception as exc:
+            if is_http_401_error(exc):
+                warn_auth_required(context="preview_raster")
+                return None
+            raise
     else:
         if series_dim is not None and band is not None:
             da = (
@@ -100,7 +108,13 @@ def preview_raster(
             )
         if hasattr(da, "isel") and series_dim is not None and band is None:
             da = da.isel({series_dim: 0}, drop=True)
-        plot = da.plot.imshow(ax=axis, robust=robust, cmap=cmap)
+        try:
+            plot = da.plot.imshow(ax=axis, robust=robust, cmap=cmap)
+        except Exception as exc:
+            if is_http_401_error(exc):
+                warn_auth_required(context="preview_raster")
+                return None
+            raise
 
     if title is None:
         title = _build_title(da, variable=variable, band=band, time_index=time_index)
@@ -153,7 +167,13 @@ def plot_time_series(
     ts = da.mean(dim=reduce_dims, skipna=True)
     if compute and hasattr(ts, "compute"):
         # Compute once to avoid repeated dask evaluations per plotted line.
-        ts = ts.compute()
+        try:
+            ts = ts.compute()
+        except Exception as exc:
+            if is_http_401_error(exc):
+                warn_auth_required(context="plot_time_series")
+                return None
+            raise
     fig, ax = plt.subplots(figsize=figsize)
 
     series_dim = band_dim if band_dim in ts.dims else None
@@ -232,6 +252,11 @@ def explore_odc(
         raise ImportError(
             "odc-geo interactive plotting is required. Install with `pip install tern-stac[odc]`"
         ) from exc
+    except Exception as exc:
+        if is_http_401_error(exc):
+            warn_auth_required(context="explore_odc")
+            return None
+        raise
     return mapper
 
 
