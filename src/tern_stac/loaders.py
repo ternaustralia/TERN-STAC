@@ -185,7 +185,7 @@ def load_items_odc(
 def load_items_as_time_series(
     items: Sequence[Any],
     *,
-    media_type: str = "application/xml",
+    media_type: Optional[str] = None,
     role: Optional[str] = None,
     asset_key: Optional[str] = None,
     time_key: str = "datetime",

@@ -49,7 +49,7 @@ def main() -> None:
 
     ds = load_items_as_time_series(
         items,
-        media_type="application/xml",
+        media_type=None,
         role="data",
         chunks=True,
         clip_bounds=REGION_BOUNDS,
