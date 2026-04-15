@@ -12,10 +12,10 @@ from tern_stac import (
 )
 
 # Fill in from your catalog values
-COLLECTION_ID = "gov_qld_fractional_cover_v3_landsat_fractional_cover__seasonal"
-START_DATE = "2020-01-01"
-END_DATE = "2025-01-01"
-
+COLLECTION_ID = "model-derived_smips__v1_0_totalbucket_2024"
+START_DATE = "2024-01-01"
+END_DATE = "2025-12-31"
+# BANDS = ["b5", "b4", "b3"]
 REGION_BOUNDS = (
     152.914613,
     -27.561273,
@@ -43,6 +43,10 @@ def main() -> None:
             "No items returned. Update collection/date/bbox placeholders."
         )
 
+    def per_item_reduce(ds, _item):
+        # Reduce per scene before concat to keep memory usage small.
+        return ds.mean(dim=("x", "y"), skipna=True)
+
     ds = load_items_as_time_series(
         items,
         media_type=None,
@@ -51,6 +55,7 @@ def main() -> None:
         clip_bounds=REGION_BOUNDS,
         clip_bounds_crs=REGION_BOUNDS_CRS,
         to_numpy_nodata=True,
+        preprocess=per_item_reduce,
     )
 
     plot_time_series(

@@ -192,10 +192,20 @@ def load_items_as_time_series(
     chunks: Any = True,
     clip_bounds: Optional[tuple[float, float, float, float]] = None,
     clip_bounds_crs: Optional[str] = None,
+    point: Optional[tuple[float, float]] = None,
+    point_crs: str = "EPSG:4326",
+    point_method: str = "nearest",
     to_numpy_nodata: bool = False,
     preprocess: Optional[Callable[[Any, Any], Any]] = None,
 ):
-    """Open per-item raster assets with ``rioxarray.open_rasterio`` and concat on time."""
+    """Open per-item raster assets with ``rioxarray.open_rasterio`` and concat on time.
+
+    Defaults:
+    - if ``clip_bounds`` is provided and ``preprocess`` is omitted, each item is reduced
+      by spatial mean over ``x``/``y``.
+    - if ``point`` is provided and ``preprocess`` is omitted, each item is sampled at
+      the given coordinate (transformed from ``point_crs`` to data CRS when needed).
+    """
 
     if xr is None:
         raise ImportError(
@@ -208,6 +218,51 @@ def load_items_as_time_series(
         raise ImportError(
             "rioxarray is not installed. Install with `pip install tern-stac[xarray]`"
         ) from exc
+
+    if point is not None and clip_bounds is not None:
+        raise ValueError("Pass either `clip_bounds` or `point`, not both.")
+
+    effective_preprocess = preprocess
+    if effective_preprocess is None and point is not None:
+        point_x, point_y = point
+
+        def _sample_point(ds, _item):
+            x_value, y_value = point_x, point_y
+            if point_crs is not None:
+                try:
+                    data_crs = ds.rio.crs
+                except Exception:
+                    data_crs = None
+                if data_crs is not None:
+                    data_crs_str = str(data_crs)
+                    same_crs = data_crs_str.upper() == point_crs.upper()
+                    if not same_crs:
+                        try:
+                            from rasterio.crs import CRS
+
+                            same_crs = CRS.from_user_input(data_crs_str) == CRS.from_user_input(
+                                point_crs
+                            )
+                        except Exception:
+                            same_crs = False
+                    if not same_crs:
+                        try:
+                            from rasterio.warp import transform
+                        except Exception as exc:  # pragma: no cover
+                            raise ImportError(
+                                "rasterio is required for point CRS transform. "
+                                "Install with `pip install tern-stac[xarray]`"
+                            ) from exc
+                        xs, ys = transform(point_crs, data_crs_str, [x_value], [y_value])
+                        x_value, y_value = xs[0], ys[0]
+            return ds.sel(x=x_value, y=y_value, method=point_method)
+
+        effective_preprocess = _sample_point
+    elif effective_preprocess is None and clip_bounds is not None:
+        def _per_item_reduce(ds, _item):
+            return ds.mean(dim=("x", "y"), skipna=True)
+
+        effective_preprocess = _per_item_reduce
 
     datasets = []
     for item in items:
@@ -260,8 +315,8 @@ def load_items_as_time_series(
             except Exception:
                 pass
 
-        if preprocess is not None:
-            ds = preprocess(ds, item)
+        if effective_preprocess is not None:
+            ds = effective_preprocess(ds, item)
 
         ds = ds.assign_coords(time=_item_datetime(item, key=time_key))
         datasets.append(ds)
