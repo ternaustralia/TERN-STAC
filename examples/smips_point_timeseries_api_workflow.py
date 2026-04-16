@@ -24,6 +24,8 @@ REGION_BOUNDS = (
 )  # (minx, miny, maxx, maxy)
 REGION_BOUNDS_CRS = "EPSG:4326"
 
+POINT_LON, POINT_LAT = 152.95, -27.47
+POINT_CRS = "EPSG:4326"
 
 def main() -> None:
     """Open seasonal fractional-cover assets and plot ROI mean through time."""
@@ -43,19 +45,14 @@ def main() -> None:
             "No items returned. Update collection/date/bbox placeholders."
         )
 
-    def per_item_reduce(ds, _item):
-        # Reduce per scene before concat to keep memory usage small.
-        return ds.mean(dim=("x", "y"), skipna=True)
-
     ds = load_items_as_time_series(
         items,
         media_type=None,
         role="data",
         chunks=True,
-        clip_bounds=REGION_BOUNDS,
-        clip_bounds_crs=REGION_BOUNDS_CRS,
+        point=(POINT_LON, POINT_LAT),
+        point_crs=POINT_CRS,
         to_numpy_nodata=True,
-        preprocess=per_item_reduce,
     )
 
     plot_time_series(
@@ -63,7 +60,7 @@ def main() -> None:
         band_dim="band",
         figsize=(12, 6),
         compute=True,
-        save_path="outputs/fractional_cover_time_series.png",
+        save_path="outputs/smips_time_series.png",
         title="Fractional cover ROI mean by band",
     )
 
