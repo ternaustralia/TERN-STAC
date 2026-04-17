@@ -24,6 +24,7 @@ __all__ = [
     "laz_to_canopy_height",
     "get_item_asset_href",
     "load_items_as_time_series",
+    "load_assets_as_time_series",
     "load_items_odc",
     "load_items_stackstac",
     "mosaic_time",

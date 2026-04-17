@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Callable, Iterable, List, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Iterable, List, Optional, Sequence
 
 from .auth import is_http_401_error, warn_auth_required
+
+if TYPE_CHECKING:
+    from pystac import Asset
 
 try:
     import xarray as xr  # type: ignore
@@ -93,6 +96,27 @@ def _coerce_href(obj: Any) -> Optional[str]:
             return nested_href
 
     return None
+
+
+def _asset_field(asset: Any, key: str, default: Any = None) -> Any:
+    if isinstance(asset, dict):
+        return asset.get(key, default)
+
+    value = getattr(asset, key, None)
+    if value is not None:
+        return value
+
+    extra_fields = getattr(asset, "extra_fields", None)
+    if isinstance(extra_fields, dict):
+        return extra_fields.get(key, default)
+    return default
+
+
+def _asset_href(asset: Any) -> str:
+    href = _coerce_href(asset)
+    if isinstance(href, str) and href:
+        return href
+    raise TypeError("Asset does not provide a valid href.")
 
 
 def get_item_asset_href(
@@ -193,6 +217,14 @@ def _item_datetime(item: Any, *, key: str = "datetime") -> datetime:
         props = getattr(item, "properties", None)
         if isinstance(props, dict):
             value = props.get(key)
+        if value is None:
+            extra_fields = getattr(item, "extra_fields", None)
+            if isinstance(extra_fields, dict):
+                value = extra_fields.get(key)
+                if value is None:
+                    extra_props = extra_fields.get("properties")
+                    if isinstance(extra_props, dict):
+                        value = extra_props.get(key)
     if value is None:
         value = getattr(item, key, None)
     if isinstance(value, datetime):
@@ -395,7 +427,7 @@ def load_items_as_time_series(
 
 
 def load_assets_as_time_series(
-    assets: Sequence[dict],
+    assets: Sequence["Asset"],
     *,
     time_key: str = "datetime",
     chunks: Any = True,
@@ -509,9 +541,9 @@ def load_assets_as_time_series(
                 densify_pts=21,
             )
 
-    filtered_assets: list[dict] = []
+    filtered_assets: list["Asset"] = []
     for asset in assets:
-        geom_bounds = _geometry_bounds(asset.get("geometry"))
+        geom_bounds = _geometry_bounds(_asset_field(asset, "geometry"))
         if geom_bounds is None:
             filtered_assets.append(asset)
             continue
@@ -532,7 +564,7 @@ def load_assets_as_time_series(
     if preprocess is not None:
         datasets = []
         for asset in filtered_assets:
-            href = asset["href"]
+            href = _asset_href(asset)
             try:
                 ds = rxr.open_rasterio(href, chunks=chunks)
             except Exception as exc:
@@ -565,7 +597,7 @@ def load_assets_as_time_series(
     if point is not None:
         grouped: dict[datetime, list[Any]] = {}
         for asset in filtered_assets:
-            href = asset["href"]
+            href = _asset_href(asset)
             try:
                 ds = rxr.open_rasterio(href, chunks=chunks)
             except Exception as exc:
@@ -619,7 +651,7 @@ def load_assets_as_time_series(
         grouped_count: dict[datetime, Any] = {}
 
         for asset in filtered_assets:
-            href = asset["href"]
+            href = _asset_href(asset)
             try:
                 ds = rxr.open_rasterio(href, chunks=chunks)
             except Exception as exc:
@@ -662,7 +694,7 @@ def load_assets_as_time_series(
 
     datasets = []
     for asset in filtered_assets:
-        href = asset["href"]
+        href = _asset_href(asset)
         try:
             ds = rxr.open_rasterio(href, chunks=chunks)
         except Exception as exc:
