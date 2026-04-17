@@ -27,6 +27,7 @@ REGION_BOUNDS_CRS = "EPSG:4326"
 POINT_LON, POINT_LAT = 152.95, -27.47
 POINT_CRS = "EPSG:4326"
 
+
 def main() -> None:
     """Open seasonal fractional-cover assets and plot ROI mean through time."""
 

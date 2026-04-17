@@ -74,6 +74,11 @@ Reading data via data.tern.org.au involves underlying gdal methods. a gdalrc or 
 
 `~/.netrc` is a common way to configure authentication for network services, and is supported by many tools like curl, python requests, gdal and many others.
 
+The config file name is strict `.netrc` and need to be put under home directory, example:
+- windows: "C:\Users\\(username)\\.netrc"
+- linux: "/home/(username)/.netrc"
+
+
 create `~/.netrc` using the apikey:
 
 ```
@@ -89,6 +94,11 @@ machine other.sources.if.any
 #### create gdalrc config file
 
 `~/.gdal/gdalrc` contains gdal-only env variables
+
+The config file name is strict `gdalrc` and need to be put under home directory, example:
+- windows: "C:\Users\\(username)\\.gdal\\gdalrc"
+- linux: "/home/(username)/.gdal/gdalrc"
+
 
 create `~/.gdal/gdalrc` using the apikey:
 

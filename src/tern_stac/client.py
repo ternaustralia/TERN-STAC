@@ -39,6 +39,11 @@ class TernStacClient:
 
         return self._client.search(*args, **kwargs)
 
+    def collection_search(self, *args: Any, **kwargs: Any):
+        """Proxy to ``Client.collection_search`` for STAC API-like backends."""
+
+        return self._client.collection_search(*args, **kwargs)
+
     def get_collection(self, *args: Any, **kwargs: Any):
         """Get a collection by ID from the STAC root/catalog."""
 
