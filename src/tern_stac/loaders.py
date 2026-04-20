@@ -130,14 +130,10 @@ def get_item_asset_href(
 
     Parameters
     ----------
-    item:
-        STAC item object or asset-like object.
-    asset_key:
-        Optional explicit asset key.
-    media_type:
-        Optional media type filter.
-    role:
-        Optional role filter.
+    item: STAC item object or asset-like object.
+    asset_key: Optional explicit asset key.
+    media_type: Optional media type filter.
+    role: Optional role filter.
     """
 
     if asset_key is None and isinstance(item, str):
@@ -336,9 +332,9 @@ def load_items_as_time_series(
                         try:
                             from rasterio.crs import CRS
 
-                            same_crs = CRS.from_user_input(data_crs_str) == CRS.from_user_input(
-                                point_crs
-                            )
+                            same_crs = CRS.from_user_input(
+                                data_crs_str
+                            ) == CRS.from_user_input(point_crs)
                         except Exception:
                             same_crs = False
                     if not same_crs:
@@ -349,12 +345,15 @@ def load_items_as_time_series(
                                 "rasterio is required for point CRS transform. "
                                 "Install with `pip install tern-stac[xarray]`"
                             ) from exc
-                        xs, ys = transform(point_crs, data_crs_str, [x_value], [y_value])
+                        xs, ys = transform(
+                            point_crs, data_crs_str, [x_value], [y_value]
+                        )
                         x_value, y_value = xs[0], ys[0]
             return ds.sel(x=x_value, y=y_value, method=point_method)
 
         effective_preprocess = _sample_point
     elif effective_preprocess is None and clip_bounds is not None:
+
         def _per_item_reduce(ds, _item):
             return ds.mean(dim=("x", "y"), skipna=True)
 
@@ -557,9 +556,7 @@ def load_assets_as_time_series(
             filtered_assets.append(asset)
 
     if not filtered_assets:
-        raise ValueError(
-            "No assets matched spatial filters from geometry metadata."
-        )
+        raise ValueError("No assets matched spatial filters from geometry metadata.")
 
     if preprocess is not None:
         datasets = []
@@ -591,7 +588,9 @@ def load_assets_as_time_series(
                 "No datasets were loaded; check input items/asset filters, "
                 "or verify authentication for protected asset URLs."
             )
-        return xr.concat(sorted(datasets, key=lambda d: d.time.values.item()), dim="time")
+        return xr.concat(
+            sorted(datasets, key=lambda d: d.time.values.item()), dim="time"
+        )
 
     # Default point mode: sample each relevant asset at point, then combine per timestamp.
     if point is not None:
@@ -719,7 +718,6 @@ def load_assets_as_time_series(
         )
 
     return xr.concat(sorted(datasets, key=lambda d: d.time.values.item()), dim="time")
-
 
 
 # Re-export stackstac loader from this module for discoverability alongside the
