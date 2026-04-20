@@ -121,6 +121,10 @@ ds = load_from_tern("https://example.com/some.tif", backend="rasterio")
 
 ## STAC asset helpers
 
+`get_item_asset_href(...)` now supports multiple matching assets:
+- returns a `str` when exactly one asset matches
+- returns a `list[str]` when multiple assets match filters (`media_type`/`role`)
+
 ## Examples
 
 Run one of the API examples:
@@ -151,9 +155,13 @@ print(len(items))
 ```python
 from tern_stac import get_item_asset_href, load_items_as_time_series, load_items_odc
 
-asset = get_item_asset_href(item, media_type="application/xml", role="data")
+asset_or_assets = get_item_asset_href(item, media_type="application/xml", role="data")
+# `asset_or_assets` is `str` for one match, or `list[str]` for multiple matches.
 
 # Load many rasterio-compatible items into a time-indexed xarray object
+# For items containing multiple matching TIFF assets with the same timestamp:
+# - point query: samples each tile and averages per timestamp
+# - clip_bounds query: uses all intersecting tiles and computes one ROI mean per timestamp
 ts = load_items_as_time_series(
     items,
     media_type="application/xml",

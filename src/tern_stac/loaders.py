@@ -125,8 +125,8 @@ def get_item_asset_href(
     asset_key: Optional[str] = None,
     media_type: Optional[str] = None,
     role: Optional[str] = None,
-) -> str:
-    """Resolve one asset href from a STAC item.
+) -> str | list[str]:
+    """Resolve one or more asset hrefs from a STAC item.
 
     Parameters
     ----------
@@ -134,6 +134,16 @@ def get_item_asset_href(
     asset_key: Optional explicit asset key.
     media_type: Optional media type filter.
     role: Optional role filter.
+
+    Returns
+    -------
+    str | list[str]
+        A single href when one asset matches, or a list of hrefs when
+        multiple assets match the provided filters.
+
+    Notes
+    -----
+    When ``asset_key`` is provided, this always resolves to one href.
     """
 
     if asset_key is None and isinstance(item, str):
@@ -197,10 +207,9 @@ def get_item_asset_href(
 
     if not hrefs:
         raise KeyError("No matching asset found for given filters.")
-    if len(hrefs) > 1:
-        raise ValueError("Multiple matching assets found; pass asset_key explicitly.")
-
-    return hrefs[0]
+    if len(hrefs) == 1:
+        return hrefs[0]
+    return hrefs
 
 
 def _item_datetime(item: Any, *, key: str = "datetime") -> datetime:
@@ -293,10 +302,16 @@ def load_items_as_time_series(
     """Open per-item raster assets with ``rioxarray.open_rasterio`` and concat on time.
 
     Defaults:
-    - if ``clip_bounds`` is provided and ``preprocess`` is omitted, each item is reduced
-      by spatial mean over ``x``/``y``.
-    - if ``point`` is provided and ``preprocess`` is omitted, each item is sampled at
-      the given coordinate (transformed from ``point_crs`` to data CRS when needed).
+    - if ``clip_bounds`` is provided and ``preprocess`` is omitted, all matched
+      assets for each timestamp are combined into one ROI mean value.
+    - if ``point`` is provided and ``preprocess`` is omitted, all matched assets
+      for each timestamp are sampled at point and combined by mean.
+
+    Notes
+    -----
+    - Items with multiple matching assets are supported.
+    - If ``preprocess`` is provided, default point sampling / ROI reduction is
+      not applied; ``preprocess`` is executed per opened asset.
     """
 
     if xr is None:
@@ -314,107 +329,226 @@ def load_items_as_time_series(
     if point is not None and clip_bounds is not None:
         raise ValueError("Pass either `clip_bounds` or `point`, not both.")
 
-    effective_preprocess = preprocess
-    if effective_preprocess is None and point is not None:
-        point_x, point_y = point
+    def _normalize_hrefs(value: Any) -> list[str]:
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, Iterable):
+            hrefs = [v for v in value if isinstance(v, str)]
+            if hrefs:
+                return hrefs
+        raise TypeError("Expected one or more asset hrefs.")
 
-        def _sample_point(ds, _item):
-            x_value, y_value = point_x, point_y
-            if point_crs is not None:
+    def _transform_point_to_crs(
+        pt: tuple[float, float], src_crs: str, dst_crs: str
+    ) -> tuple[float, float]:
+        if _crs_equal(src_crs, dst_crs):
+            return pt
+        try:
+            from rasterio.warp import transform
+        except Exception as exc:  # pragma: no cover
+            raise ImportError(
+                "rasterio is required for point CRS transform. "
+                "Install with `pip install tern-stac[xarray]`"
+            ) from exc
+        xs, ys = transform(src_crs, dst_crs, [pt[0]], [pt[1]])
+        return xs[0], ys[0]
+
+    def _clip_dataset(ds):
+        if clip_bounds is None:
+            return ds
+        minx, miny, maxx, maxy = clip_bounds
+        if clip_bounds_crs is not None:
+            try:
+                data_crs = ds.rio.crs
+            except Exception:
+                data_crs = None
+            if data_crs is not None:
+                data_crs_str = str(data_crs)
+                if not _crs_equal(data_crs_str, clip_bounds_crs):
+                    try:
+                        from rasterio.warp import transform_bounds
+                    except Exception as exc:  # pragma: no cover
+                        raise ImportError(
+                            "rasterio is required for clip_bounds CRS transform. "
+                            "Install with `pip install tern-stac[xarray]`"
+                        ) from exc
+                    minx, miny, maxx, maxy = transform_bounds(
+                        clip_bounds_crs,
+                        data_crs_str,
+                        minx,
+                        miny,
+                        maxx,
+                        maxy,
+                        densify_pts=21,
+                    )
+        y_coord_desc = ds.y[0] > ds.y[-1]
+        if y_coord_desc:
+            return ds.sel(x=slice(minx, maxx), y=slice(maxy, miny))
+        return ds.sel(x=slice(minx, maxx), y=slice(miny, maxy))
+
+    if preprocess is not None:
+        datasets = []
+        for item in items:
+            hrefs = _normalize_hrefs(
+                get_item_asset_href(
+                    item, asset_key=asset_key, media_type=media_type, role=role
+                )
+            )
+            timestamp = _item_datetime(item, key=time_key)
+            for href in hrefs:
                 try:
-                    data_crs = ds.rio.crs
-                except Exception:
-                    data_crs = None
-                if data_crs is not None:
-                    data_crs_str = str(data_crs)
-                    same_crs = data_crs_str.upper() == point_crs.upper()
-                    if not same_crs:
-                        try:
-                            from rasterio.crs import CRS
+                    ds = rxr.open_rasterio(href, chunks=chunks)
+                except Exception as exc:
+                    if is_http_401_error(exc):
+                        warn_auth_required(context="load_items_as_time_series")
+                        continue
+                    raise
+                if clip_bounds is not None:
+                    ds = _clip_dataset(ds)
+                if to_numpy_nodata:
+                    try:
+                        ds = ds.where(ds != ds.rio.nodata, float("nan"))
+                    except Exception:
+                        pass
+                ds = preprocess(ds, item)
+                ds = ds.assign_coords(time=timestamp)
+                datasets.append(ds)
 
-                            same_crs = CRS.from_user_input(
-                                data_crs_str
-                            ) == CRS.from_user_input(point_crs)
-                        except Exception:
-                            same_crs = False
-                    if not same_crs:
-                        try:
-                            from rasterio.warp import transform
-                        except Exception as exc:  # pragma: no cover
-                            raise ImportError(
-                                "rasterio is required for point CRS transform. "
-                                "Install with `pip install tern-stac[xarray]`"
-                            ) from exc
-                        xs, ys = transform(
-                            point_crs, data_crs_str, [x_value], [y_value]
-                        )
-                        x_value, y_value = xs[0], ys[0]
-            return ds.sel(x=x_value, y=y_value, method=point_method)
+        if not datasets:
+            raise ValueError(
+                "No datasets were loaded; check input items/asset filters, "
+                "or verify authentication for protected asset URLs."
+            )
+        return xr.concat(
+            sorted(datasets, key=lambda d: d.time.values.item()), dim="time"
+        )
 
-        effective_preprocess = _sample_point
-    elif effective_preprocess is None and clip_bounds is not None:
+    if point is not None:
+        grouped: dict[datetime, list[Any]] = {}
+        for item in items:
+            hrefs = _normalize_hrefs(
+                get_item_asset_href(
+                    item, asset_key=asset_key, media_type=media_type, role=role
+                )
+            )
+            timestamp = _item_datetime(item, key=time_key)
+            for href in hrefs:
+                try:
+                    ds = rxr.open_rasterio(href, chunks=chunks)
+                except Exception as exc:
+                    if is_http_401_error(exc):
+                        warn_auth_required(context="load_items_as_time_series")
+                        continue
+                    raise
+                if to_numpy_nodata:
+                    try:
+                        ds = ds.where(ds != ds.rio.nodata, float("nan"))
+                    except Exception:
+                        pass
 
-        def _per_item_reduce(ds, _item):
-            return ds.mean(dim=("x", "y"), skipna=True)
+                x_value, y_value = point
+                if point_crs is not None:
+                    try:
+                        data_crs = ds.rio.crs
+                    except Exception:
+                        data_crs = None
+                    if data_crs is not None:
+                        data_crs_str = str(data_crs)
+                        if not _crs_equal(data_crs_str, point_crs):
+                            x_value, y_value = _transform_point_to_crs(
+                                (x_value, y_value), point_crs, data_crs_str
+                            )
+                sampled = ds.sel(x=x_value, y=y_value, method=point_method)
+                grouped.setdefault(timestamp, []).append(sampled)
 
-        effective_preprocess = _per_item_reduce
+        if not grouped:
+            raise ValueError(
+                "No datasets were loaded; check input items/asset filters, "
+                "or verify authentication for protected asset URLs."
+            )
+
+        datasets = []
+        for timestamp in sorted(grouped):
+            samples = grouped[timestamp]
+            if len(samples) == 1:
+                out = samples[0]
+            else:
+                out = xr.concat(samples, dim="asset").mean(dim="asset", skipna=True)
+            out = out.assign_coords(time=timestamp)
+            datasets.append(out)
+        return xr.concat(datasets, dim="time")
+
+    if clip_bounds is not None:
+        grouped_sum: dict[datetime, Any] = {}
+        grouped_count: dict[datetime, Any] = {}
+        for item in items:
+            hrefs = _normalize_hrefs(
+                get_item_asset_href(
+                    item, asset_key=asset_key, media_type=media_type, role=role
+                )
+            )
+            timestamp = _item_datetime(item, key=time_key)
+            for href in hrefs:
+                try:
+                    ds = rxr.open_rasterio(href, chunks=chunks)
+                except Exception as exc:
+                    if is_http_401_error(exc):
+                        warn_auth_required(context="load_items_as_time_series")
+                        continue
+                    raise
+                ds = _clip_dataset(ds)
+                if to_numpy_nodata:
+                    try:
+                        ds = ds.where(ds != ds.rio.nodata, float("nan"))
+                    except Exception:
+                        pass
+
+                tile_sum = ds.sum(dim=("x", "y"), skipna=True)
+                tile_count = ds.count(dim=("x", "y"))
+                if timestamp in grouped_sum:
+                    grouped_sum[timestamp] = grouped_sum[timestamp] + tile_sum
+                    grouped_count[timestamp] = grouped_count[timestamp] + tile_count
+                else:
+                    grouped_sum[timestamp] = tile_sum
+                    grouped_count[timestamp] = tile_count
+
+        if not grouped_sum:
+            raise ValueError(
+                "No datasets were loaded; check input items/asset filters, "
+                "or verify authentication for protected asset URLs."
+            )
+
+        datasets = []
+        for timestamp in sorted(grouped_sum):
+            count = grouped_count[timestamp]
+            out = grouped_sum[timestamp] / count.where(count > 0)
+            out = out.assign_coords(time=timestamp)
+            datasets.append(out)
+        return xr.concat(datasets, dim="time")
 
     datasets = []
     for item in items:
-        href = get_item_asset_href(
-            item, asset_key=asset_key, media_type=media_type, role=role
+        hrefs = _normalize_hrefs(
+            get_item_asset_href(
+                item, asset_key=asset_key, media_type=media_type, role=role
+            )
         )
-        try:
-            ds = rxr.open_rasterio(href, chunks=chunks)
-        except Exception as exc:
-            if is_http_401_error(exc):
-                warn_auth_required(context="load_items_as_time_series")
-                continue
-            raise
-
-        if clip_bounds is not None:
-            minx, miny, maxx, maxy = clip_bounds
-            if clip_bounds_crs is not None:
-                try:
-                    data_crs = ds.rio.crs
-                except Exception:
-                    data_crs = None
-                if data_crs is not None:
-                    data_crs_str = str(data_crs)
-                    if data_crs_str.upper() != clip_bounds_crs.upper():
-                        try:
-                            from rasterio.warp import transform_bounds
-                        except Exception as exc:  # pragma: no cover
-                            raise ImportError(
-                                "rasterio is required for clip_bounds CRS transform. "
-                                "Install with `pip install tern-stac[xarray]`"
-                            ) from exc
-                        minx, miny, maxx, maxy = transform_bounds(
-                            clip_bounds_crs,
-                            data_crs_str,
-                            minx,
-                            miny,
-                            maxx,
-                            maxy,
-                            densify_pts=21,
-                        )
-            y_coord_desc = ds.y[0] > ds.y[-1]
-            if y_coord_desc:
-                ds = ds.sel(x=slice(minx, maxx), y=slice(maxy, miny))
-            else:
-                ds = ds.sel(x=slice(minx, maxx), y=slice(miny, maxy))
-
-        if to_numpy_nodata:
+        timestamp = _item_datetime(item, key=time_key)
+        for href in hrefs:
             try:
-                ds = ds.where(ds != ds.rio.nodata, float("nan"))
-            except Exception:
-                pass
-
-        if effective_preprocess is not None:
-            ds = effective_preprocess(ds, item)
-
-        ds = ds.assign_coords(time=_item_datetime(item, key=time_key))
-        datasets.append(ds)
+                ds = rxr.open_rasterio(href, chunks=chunks)
+            except Exception as exc:
+                if is_http_401_error(exc):
+                    warn_auth_required(context="load_items_as_time_series")
+                    continue
+                raise
+            if to_numpy_nodata:
+                try:
+                    ds = ds.where(ds != ds.rio.nodata, float("nan"))
+                except Exception:
+                    pass
+            ds = ds.assign_coords(time=timestamp)
+            datasets.append(ds)
 
     if not datasets:
         raise ValueError(
